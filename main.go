@@ -15,7 +15,7 @@ Completed bool   `json:"completed"`
 }
 
 // global 
-var todos []Todo
+var todos = []Todo{}
 var nextID = 1
 
 func main() {

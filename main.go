@@ -3,6 +3,7 @@ package main
 import (
 	"net/http"
 	"strconv"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"gorm.io/driver/postgres"
@@ -10,9 +11,13 @@ import (
 )
 
 type Todo struct {
-	ID        uint   `json:"id" gorm:"primaryKey"`
-	Title     string `json:"title" gorm:"not null"`
-	Completed bool   `json:"completed" gorm:"default:false"`
+	ID          uint       `json:"id" gorm:"primaryKey"`
+	Title       string     `json:"title" gorm:"not null"`
+	Completed   bool       `json:"completed" gorm:"default:false"`
+	Category    string     `json:"category"`
+	Priority    string     `json:"priority"`
+	CompletedAt *time.Time `json:"completedAt"`
+	DueDate     *time.Time `json:"dueDate"`
 }
 
 var db *gorm.DB

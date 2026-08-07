@@ -35,14 +35,16 @@ func main() {
 
 	router := gin.Default()
 
-router.GET("/todos", getTodos)
-router.POST("/todos", createTodo)
-router.GET("/todos/search", searchTodos)      // must come before /todos/:id
-router.GET("/todos/:id", getTodoByID)
-router.PUT("/todos/:id", updateTodo)
-router.DELETE("/todos/:id", deleteTodo)
-router.GET("/todos/category/:category", getTodosByCategory)
-router.GET("/todos/status/:status", getTodosByStatus)
+	router.GET("/todos", getTodos)
+	router.POST("/todos", createTodo)
+	router.GET("/todos/search", searchTodos)
+	router.DELETE("/todos", deleteAllTodos) // before /todos/:id
+	router.GET("/todos/:id", getTodoByID)
+	router.PUT("/todos/:id", updateTodo)
+	router.DELETE("/todos/:id", deleteTodo)
+	router.GET("/todos/category/:category", getTodosByCategory)
+	router.PUT("/todos/category/:category", updateTodosByCategory) // before /todos/:id... already fine since different method
+	router.GET("/todos/status/:status", getTodosByStatus)
 
 	// Start the server
 	router.Run(":8080")
@@ -172,18 +174,48 @@ func getTodosByCategory(c *gin.Context) {
 	category := c.Param("category")
 
 	var todos []Todo
-
 	result := db.Where("category = ?", category).Find(&todos)
-
 	if result.Error != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"error": "Database error",
-		})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Database error"})
 		return
 	}
 
 	c.JSON(http.StatusOK, todos)
 }
+func updateTodosByCategory(c *gin.Context) {
+	category := c.Param("category")
+
+	var body struct {
+		Completed bool `json:"completed"`
+	}
+
+	if err := c.ShouldBindJSON(&body); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request body"})
+		return
+	}
+
+	var todos []Todo
+	result := db.Where("category = ?", category).Find(&todos)
+	if result.Error != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Database error"})
+		return
+	}
+
+	now := time.Now().UTC()
+
+	for i := range todos {
+		if body.Completed && !todos[i].Completed {
+			todos[i].CompletedAt = &now
+		} else if !body.Completed {
+			todos[i].CompletedAt = nil
+		}
+		todos[i].Completed = body.Completed
+		db.Save(&todos[i])
+	}
+
+	c.JSON(http.StatusOK, todos)
+}
+
 func getTodosByStatus(c *gin.Context) {
 	status := c.Param("status")
 
@@ -211,4 +243,13 @@ func searchTodos(c *gin.Context) {
 	db.Where("LOWER(title) LIKE LOWER(?)", "%"+query+"%").Find(&todos)
 
 	c.JSON(http.StatusOK, todos)
+}
+func deleteAllTodos(c *gin.Context) {
+	result := db.Where("1 = 1").Delete(&Todo{})
+	if result.Error != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Database error"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "All todos deleted"})
 }

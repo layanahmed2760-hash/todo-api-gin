@@ -63,10 +63,23 @@ func createTodo(c *gin.Context) {
 		return
 	}
 
+	if !isValidPriority(newTodo.Priority) {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Priority must be Low, Medium, or High"})
+		return
+	}
+
+	if newTodo.DueDate != nil && newTodo.DueDate.Before(time.Now()) {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Due date cannot be in the past"})
+		return
+	}
+
 	db.Create(&newTodo)
 	c.JSON(http.StatusCreated, newTodo)
 }
 
+func isValidPriority(p string) bool {
+	return p == "Low" || p == "Medium" || p == "High"
+}
 func getTodoByID(c *gin.Context) {
 	id, err := strconv.Atoi(c.Param("id"))
 	if err != nil {

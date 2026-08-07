@@ -41,6 +41,10 @@ func main() {
 	router.PUT("/todos/:id", updateTodo)
 	router.DELETE("/todos/:id", deleteTodo)
 
+	// New endpoint
+	router.GET("/todos/category/:category", getTodosByCategory)
+
+	// Start the server
 	router.Run(":8080")
 }
 
@@ -163,4 +167,20 @@ func deleteTodo(c *gin.Context) {
 
 	db.Delete(&todo)
 	c.JSON(http.StatusOK, gin.H{"message": "Todo deleted"})
+}
+func getTodosByCategory(c *gin.Context) {
+	category := c.Param("category")
+
+	var todos []Todo
+
+	result := db.Where("category = ?", category).Find(&todos)
+
+	if result.Error != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error": "Database error",
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, todos)
 }

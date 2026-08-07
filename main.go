@@ -121,13 +121,33 @@ func updateTodo(c *gin.Context) {
 		return
 	}
 
+	if !isValidPriority(updatedTodo.Priority) {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Priority must be Low, Medium, or High"})
+		return
+	}
+
+	if updatedTodo.DueDate != nil && updatedTodo.DueDate.Before(time.Now()) {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Due date cannot be in the past"})
+		return
+	}
+
+	// Handle completedAt based on completed status changing
+	if updatedTodo.Completed && !todo.Completed {
+		now := time.Now().UTC()
+		todo.CompletedAt = &now
+	} else if !updatedTodo.Completed {
+		todo.CompletedAt = nil
+	}
+
 	todo.Title = updatedTodo.Title
 	todo.Completed = updatedTodo.Completed
-	db.Save(&todo)
+	todo.Category = updatedTodo.Category
+	todo.Priority = updatedTodo.Priority
+	todo.DueDate = updatedTodo.DueDate
 
+	db.Save(&todo)
 	c.JSON(http.StatusOK, todo)
 }
-
 func deleteTodo(c *gin.Context) {
 	id, err := strconv.Atoi(c.Param("id"))
 	if err != nil {

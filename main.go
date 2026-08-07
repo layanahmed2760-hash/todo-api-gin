@@ -35,15 +35,14 @@ func main() {
 
 	router := gin.Default()
 
-	router.GET("/todos", getTodos)
-	router.POST("/todos", createTodo)
-	router.GET("/todos/:id", getTodoByID)
-	router.PUT("/todos/:id", updateTodo)
-	router.DELETE("/todos/:id", deleteTodo)
-
-	// New endpoint
-	router.GET("/todos/category/:category", getTodosByCategory)
-	router.GET("/todos/status/:status", getTodosByStatus)
+router.GET("/todos", getTodos)
+router.POST("/todos", createTodo)
+router.GET("/todos/search", searchTodos)      // must come before /todos/:id
+router.GET("/todos/:id", getTodoByID)
+router.PUT("/todos/:id", updateTodo)
+router.DELETE("/todos/:id", deleteTodo)
+router.GET("/todos/category/:category", getTodosByCategory)
+router.GET("/todos/status/:status", getTodosByStatus)
 
 	// Start the server
 	router.Run(":8080")
@@ -188,21 +187,28 @@ func getTodosByCategory(c *gin.Context) {
 func getTodosByStatus(c *gin.Context) {
 	status := c.Param("status")
 
-	var todos []Todo
-
-	switch status {
-	case "completed":
-		db.Where("completed = ?", true).Find(&todos)
-
-	case "pending":
-		db.Where("completed = ?", false).Find(&todos)
-
-	default:
+	completed, err := strconv.ParseBool(status)
+	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{
-			"error": "Status must be completed or pending",
+			"error": "Status must be true or false",
 		})
 		return
 	}
+
+	var todos []Todo
+	db.Where("completed = ?", completed).Find(&todos)
+	c.JSON(http.StatusOK, todos)
+}
+func searchTodos(c *gin.Context) {
+	query := c.Query("q")
+
+	if query == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Search query 'q' is required"})
+		return
+	}
+
+	var todos []Todo
+	db.Where("LOWER(title) LIKE LOWER(?)", "%"+query+"%").Find(&todos)
 
 	c.JSON(http.StatusOK, todos)
 }

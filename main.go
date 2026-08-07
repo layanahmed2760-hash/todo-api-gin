@@ -43,6 +43,7 @@ func main() {
 
 	// New endpoint
 	router.GET("/todos/category/:category", getTodosByCategory)
+	router.GET("/todos/status/:status", getTodosByStatus)
 
 	// Start the server
 	router.Run(":8080")
@@ -178,6 +179,27 @@ func getTodosByCategory(c *gin.Context) {
 	if result.Error != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"error": "Database error",
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, todos)
+}
+func getTodosByStatus(c *gin.Context) {
+	status := c.Param("status")
+
+	var todos []Todo
+
+	switch status {
+	case "completed":
+		db.Where("completed = ?", true).Find(&todos)
+
+	case "pending":
+		db.Where("completed = ?", false).Find(&todos)
+
+	default:
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": "Status must be completed or pending",
 		})
 		return
 	}

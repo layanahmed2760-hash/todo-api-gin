@@ -3,6 +3,7 @@ package main
 import (
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -29,6 +30,7 @@ type User struct {
 }
 
 var db *gorm.DB
+
 func signup(c *gin.Context) {
 	var input struct {
 		Username string `json:"username"`
@@ -74,23 +76,26 @@ func main() {
 	if err != nil {
 		panic("failed to connect to database: " + err.Error())
 	}
-db.AutoMigrate(&Todo{}, &User{})
+	db.AutoMigrate(&Todo{}, &User{})
 
 	router := gin.Default()
 
-router.POST("/signup", signup)
-router.POST("/login", login)
-router.GET("/todos", getTodos)
-router.POST("/todos", createTodo)
-router.GET("/todos/search", searchTodos)
-	router.DELETE("/todos", deleteAllTodos) // before /todos/:id
-	router.GET("/todos/:id", getTodoByID)
-	router.PUT("/todos/:id", updateTodo)
-	router.DELETE("/todos/:id", deleteTodo)
-	router.GET("/todos/category/:category", getTodosByCategory)
-	router.PUT("/todos/category/:category", updateTodosByCategory) // before /todos/:id... already fine since different method
-	router.GET("/todos/status/:status", getTodosByStatus)
-
+	router.POST("/signup", signup)
+	router.POST("/login", login)
+	todosGroup := router.Group("/todos")
+	todosGroup.Use(authMiddleware())
+	{
+		todosGroup.GET("", getTodos)
+		todosGroup.POST("", createTodo)
+		todosGroup.GET("/search", searchTodos)
+		todosGroup.DELETE("", deleteAllTodos)
+		todosGroup.GET("/:id", getTodoByID)
+		todosGroup.PUT("/:id", updateTodo)
+		todosGroup.DELETE("/:id", deleteTodo)
+		todosGroup.GET("/category/:category", getTodosByCategory)
+		todosGroup.PUT("/category/:category", updateTodosByCategory)
+		todosGroup.GET("/status/:status", getTodosByStatus)
+	}
 	// Start the server
 	router.Run(":8080")
 }
@@ -298,6 +303,7 @@ func deleteAllTodos(c *gin.Context) {
 
 	c.JSON(http.StatusOK, gin.H{"message": "All todos deleted"})
 }
+
 var jwtSecret = []byte("your-secret-key-change-this-later")
 
 func login(c *gin.Context) {
@@ -339,4 +345,47 @@ func login(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{"token": tokenString})
+}
+func authMiddleware() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		authHeader := c.GetHeader("Authorization")
+
+		if authHeader == "" {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "Authorization header required"})
+			c.Abort()
+			return
+		}
+
+		parts := strings.Split(authHeader, " ")
+		if len(parts) != 2 || parts[0] != "Bearer" {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid authorization format"})
+			c.Abort()
+			return
+		}
+
+		tokenString := parts[1]
+
+		token, err := jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
+			return jwtSecret, nil
+		})
+
+		if err != nil || !token.Valid {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid or expired token"})
+			c.Abort()
+			return
+		}
+
+		claims, ok := token.Claims.(jwt.MapClaims)
+		if !ok {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid token claims"})
+			c.Abort()
+			return
+		}
+
+		c.Set("userID", claims["userID"])
+		c.Set("username", claims["username"])
+		c.Set("role", claims["role"])
+
+		c.Next()
+	}
 }

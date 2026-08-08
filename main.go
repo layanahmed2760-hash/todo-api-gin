@@ -8,7 +8,9 @@ import (
 	"github.com/gin-gonic/gin"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
+	"golang.org/x/crypto/bcrypt"
 )
+
 
 type Todo struct {
 	ID          uint       `json:"id" gorm:"primaryKey"`
@@ -19,8 +21,50 @@ type Todo struct {
 	CompletedAt *time.Time `json:"completedAt"`
 	DueDate     *time.Time `json:"dueDate"`
 }
+type User struct {
+	ID       uint   `json:"id" gorm:"primaryKey"`
+	Username string `json:"username" gorm:"unique;not null"`
+	Password string `json:"-" gorm:"not null"`
+	Role     string `json:"role" gorm:"default:user"`
+}
 
 var db *gorm.DB
+func signup(c *gin.Context) {
+	var input struct {
+		Username string `json:"username"`
+		Password string `json:"password"`
+	}
+
+	if err := c.ShouldBindJSON(&input); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request body"})
+		return
+	}
+
+	if input.Username == "" || input.Password == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Username and password are required"})
+		return
+	}
+
+	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(input.Password), bcrypt.DefaultCost)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to hash password"})
+		return
+	}
+
+	newUser := User{
+		Username: input.Username,
+		Password: string(hashedPassword),
+		Role:     "user",
+	}
+
+	result := db.Create(&newUser)
+	if result.Error != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Username already exists"})
+		return
+	}
+
+	c.JSON(http.StatusCreated, newUser)
+}
 
 func main() {
 	dsn := "host=localhost user=postgres password=123456 dbname=todo_app port=5432 sslmode=disable"
@@ -30,14 +74,14 @@ func main() {
 	if err != nil {
 		panic("failed to connect to database: " + err.Error())
 	}
-
-	db.AutoMigrate(&Todo{})
+db.AutoMigrate(&Todo{}, &User{})
 
 	router := gin.Default()
 
-	router.GET("/todos", getTodos)
-	router.POST("/todos", createTodo)
-	router.GET("/todos/search", searchTodos)
+router.POST("/signup", signup)
+router.GET("/todos", getTodos)
+router.POST("/todos", createTodo)
+router.GET("/todos/search", searchTodos)
 	router.DELETE("/todos", deleteAllTodos) // before /todos/:id
 	router.GET("/todos/:id", getTodoByID)
 	router.PUT("/todos/:id", updateTodo)

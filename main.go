@@ -6,11 +6,11 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/golang-jwt/jwt/v5"
+	"golang.org/x/crypto/bcrypt"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
-	"golang.org/x/crypto/bcrypt"
 )
-
 
 type Todo struct {
 	ID          uint       `json:"id" gorm:"primaryKey"`
@@ -79,6 +79,7 @@ db.AutoMigrate(&Todo{}, &User{})
 	router := gin.Default()
 
 router.POST("/signup", signup)
+router.POST("/login", login)
 router.GET("/todos", getTodos)
 router.POST("/todos", createTodo)
 router.GET("/todos/search", searchTodos)
@@ -296,4 +297,46 @@ func deleteAllTodos(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{"message": "All todos deleted"})
+}
+var jwtSecret = []byte("your-secret-key-change-this-later")
+
+func login(c *gin.Context) {
+	var input struct {
+		Username string `json:"username"`
+		Password string `json:"password"`
+	}
+
+	if err := c.ShouldBindJSON(&input); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request body"})
+		return
+	}
+
+	var user User
+	result := db.Where("username = ?", input.Username).First(&user)
+	if result.Error != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid credentials"})
+		return
+	}
+
+	err := bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(input.Password))
+	if err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid credentials"})
+		return
+	}
+
+	claims := jwt.MapClaims{
+		"userID":   user.ID,
+		"username": user.Username,
+		"role":     user.Role,
+		"exp":      time.Now().Add(24 * time.Hour).Unix(),
+	}
+
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+	tokenString, err := token.SignedString(jwtSecret)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to generate token"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"token": tokenString})
 }

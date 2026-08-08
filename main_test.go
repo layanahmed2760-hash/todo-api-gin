@@ -109,3 +109,86 @@ func TestGetTodoByID_NotFound(t *testing.T) {
 		t.Errorf("expected status 404, got %d", w.Code)
 	}
 }
+func TestUpdateTodo_SetsCompletedAt(t *testing.T) {
+	router := setupTestRouter()
+
+	// First create a todo
+	createBody := map[string]interface{}{
+		"title":    "Finish task",
+		"priority": "Medium",
+	}
+	jsonBody, _ := json.Marshal(createBody)
+	req, _ := http.NewRequest("POST", "/todos", bytes.NewBuffer(jsonBody))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	var created Todo
+	json.Unmarshal(w.Body.Bytes(), &created)
+
+	// Now mark it completed
+	updateBody := map[string]interface{}{
+		"title":     "Finish task",
+		"priority":  "Medium",
+		"completed": true,
+	}
+	jsonBody2, _ := json.Marshal(updateBody)
+	req2, _ := http.NewRequest("PUT", "/todos/1", bytes.NewBuffer(jsonBody2))
+	req2.Header.Set("Content-Type", "application/json")
+	w2 := httptest.NewRecorder()
+	router.ServeHTTP(w2, req2)
+
+	if w2.Code != http.StatusOK {
+		t.Errorf("expected status 200, got %d", w2.Code)
+	}
+
+	var updated Todo
+	json.Unmarshal(w2.Body.Bytes(), &updated)
+
+	if updated.CompletedAt == nil {
+		t.Error("expected completedAt to be set, got nil")
+	}
+}
+
+func TestDeleteTodo_NotFound(t *testing.T) {
+	router := setupTestRouter()
+
+	req, _ := http.NewRequest("DELETE", "/todos/999", nil)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	if w.Code != http.StatusNotFound {
+		t.Errorf("expected status 404, got %d", w.Code)
+	}
+}
+
+func TestSearchTodos_CaseInsensitive(t *testing.T) {
+	router := setupTestRouter()
+
+	// Create a todo with a specific title
+	createBody := map[string]interface{}{
+		"title":    "Write Report",
+		"priority": "Low",
+	}
+	jsonBody, _ := json.Marshal(createBody)
+	req, _ := http.NewRequest("POST", "/todos", bytes.NewBuffer(jsonBody))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	// Search using different casing
+	req2, _ := http.NewRequest("GET", "/todos/search?q=REPORT", nil)
+	w2 := httptest.NewRecorder()
+	router.ServeHTTP(w2, req2)
+
+	if w2.Code != http.StatusOK {
+		t.Errorf("expected status 200, got %d", w2.Code)
+	}
+
+	var results []Todo
+	json.Unmarshal(w2.Body.Bytes(), &results)
+
+	if len(results) != 1 {
+		t.Errorf("expected 1 result, got %d", len(results))
+	}
+}

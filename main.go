@@ -21,6 +21,7 @@ type Todo struct {
 	Priority    string     `json:"priority"`
 	CompletedAt *time.Time `json:"completedAt"`
 	DueDate     *time.Time `json:"dueDate"`
+	UserID      uint       `json:"userId"`
 }
 type User struct {
 	ID       uint   `json:"id" gorm:"primaryKey"`
@@ -88,7 +89,7 @@ func main() {
 		todosGroup.GET("", getTodos)
 		todosGroup.POST("", createTodo)
 		todosGroup.GET("/search", searchTodos)
-		todosGroup.DELETE("", deleteAllTodos)
+		todosGroup.DELETE("", requireRole("admin"), deleteAllTodos)
 		todosGroup.GET("/:id", getTodoByID)
 		todosGroup.PUT("/:id", updateTodo)
 		todosGroup.DELETE("/:id", deleteTodo)
@@ -128,6 +129,9 @@ func createTodo(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Due date cannot be in the past"})
 		return
 	}
+
+	userIDFloat := c.MustGet("userID").(float64)
+	newTodo.UserID = uint(userIDFloat)
 
 	db.Create(&newTodo)
 	c.JSON(http.StatusCreated, newTodo)
@@ -214,6 +218,15 @@ func deleteTodo(c *gin.Context) {
 	var todo Todo
 	if result := db.First(&todo, id); result.Error != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "Todo not found"})
+		return
+	}
+
+	userIDFloat := c.MustGet("userID").(float64)
+	currentUserID := uint(userIDFloat)
+	currentRole := c.MustGet("role").(string)
+
+	if currentRole != "admin" && todo.UserID != currentUserID {
+		c.JSON(http.StatusForbidden, gin.H{"error": "You can only delete your own todos"})
 		return
 	}
 
@@ -385,6 +398,19 @@ func authMiddleware() gin.HandlerFunc {
 		c.Set("userID", claims["userID"])
 		c.Set("username", claims["username"])
 		c.Set("role", claims["role"])
+
+		c.Next()
+	}
+}
+func requireRole(role string) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		userRole := c.MustGet("role").(string)
+
+		if userRole != role {
+			c.JSON(http.StatusForbidden, gin.H{"error": "You do not have permission to perform this action"})
+			c.Abort()
+			return
+		}
 
 		c.Next()
 	}
